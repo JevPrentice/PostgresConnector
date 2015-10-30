@@ -37,10 +37,6 @@ public class PostgresConnector {
         return properties;
     }
 
-    private void registerPostgresJDBC() throws ClassNotFoundException {
-        Class.forName(properties.getProperty("database_driver"));
-    }
-
     private Connection getPostgresJDBCConnection() throws SQLException {
         String url = properties.getProperty("database_url");
         Properties props = new Properties();
@@ -59,7 +55,7 @@ public class PostgresConnector {
 
         try {
             while (scanner.hasNextLine()) {
-                fileContents.append(scanner.nextLine() + lineSeparator);
+                fileContents.append(scanner.nextLine()).append(lineSeparator);
             }
             return fileContents.toString();
         } finally {
@@ -67,11 +63,33 @@ public class PostgresConnector {
         }
     }
 
+    private void dumpMap(HashMap<String, String> hashMap) {
+
+        System.out.println("DUMP MAP");
+        int i = 1;
+        for (Map.Entry<String, String> entry : hashMap.entrySet()) {
+
+            String key = entry.getKey();
+            String value = entry.getValue();
+
+            System.out.println("Element = " + i + " KEY = " + key + " VALUE " + value);
+            i++;
+        }
+
+    }
+
     private void performQuery(Connection connection) throws SQLException {
 
         ResultSet rs = null;
         Statement stmt = null;
         PreparedStatement preparedStatement;
+        ResultSetMetaData rsmd;
+        int columnsNumber;
+
+        String tableName = properties.getProperty("exportToTableName");
+        StringBuilder columns = new StringBuilder();
+        StringBuilder values = new StringBuilder();
+        String insertSql;
 
         try {
 
@@ -86,51 +104,55 @@ public class PostgresConnector {
 
             rs = stmt.executeQuery(sql);
 
-            ResultSetMetaData rsmd = rs.getMetaData();
-            int columnsNumber = rsmd.getColumnCount();
-            String insertSql = "INSERT INTO jev_test (column1, column2, column3, column4, column5, column6) VALUES (";
+            rsmd = rs.getMetaData();
+            columnsNumber = rsmd.getColumnCount();
+
+            System.out.println("Number Results returned: " + columnsNumber);
+
+            if (columnsNumber <= 0) {
+                System.out.println("There were no results returned by the query.");
+                return;
+            } else if (columnsNumber > 9) {
+                System.out.println("This query returns " + columnsNumber + " columns, but the MAX is 9. :(");
+                return;
+            }
+
             HashMap<String, String> hashMap = new HashMap<>();
+
             while (rs.next()) {
                 for (int i = 1; i <= columnsNumber; i++) {
                     String columnName = rsmd.getColumnName(i);
                     String columnValue = rs.getString(i);
+
                     hashMap.put(columnName, columnValue);
+
+                    columns.append("column").append(i);
+                    values.append("?");
+
+                    if (i <= columnsNumber - 1) {
+                        columns.append(", ");
+                        values.append(", ");
+                    }
                 }
             }
 
-            if (hashMap.size() <= 0) {
-                System.out.println("There were no results returned by the query.");
-                return;
-            }
-
-            for (int i = 1; i <= hashMap.size(); i++) {
-                insertSql = insertSql + "?";
-                if (i <= hashMap.size() - 1) {
-                    insertSql = insertSql + ", ";
-                }
-            }
-
-            insertSql = insertSql + ")";
+            insertSql = "INSERT INTO " + tableName + " (" + columns + ") VALUES (" + values + ")";
             System.out.println(insertSql);
+
+            dumpMap(hashMap);
 
             preparedStatement = connection.prepareStatement(insertSql);
 
             int i = 1;
-            for (Map.Entry<String, String> entry : hashMap.entrySet()) {
-
-                String key = entry.getKey();
-                String value = entry.getValue();
-
+            for (String value : hashMap.values()) {
                 preparedStatement.setString(i, value);
-
-//                System.out.println(i + " - " + value);
                 i++;
             }
 
             preparedStatement.executeUpdate();
-            System.out.println("Record is inserted into table!");
+            System.out.println("Record inserted into table '" + properties.getProperty("exportToTableName") + "'");
 
-        } catch (Exception e) {
+        } catch (SQLException | IOException e) {
             e.printStackTrace();
         } finally {
 
@@ -160,7 +182,7 @@ public class PostgresConnector {
         Connection connection = null;
 
         try {
-            pgConn.registerPostgresJDBC();
+            Class.forName(pgConn.properties.getProperty("database_driver"));
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
             return;
@@ -168,18 +190,17 @@ public class PostgresConnector {
 
         try {
             connection = pgConn.getPostgresJDBCConnection();
-            pgConn.performQuery(connection);
+            System.out.println("Connection created.");
 
+            pgConn.performQuery(connection);
             System.out.println("Query Performed.");
 
             connection.close();
-
             System.out.println("Connection closed.");
 
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
-
             try {
                 if (connection != null) {
                     connection.close();
@@ -189,5 +210,4 @@ public class PostgresConnector {
             }
         }
     }
-
 }
