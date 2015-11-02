@@ -34,17 +34,18 @@ public class PostgresConnector {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
         return properties;
     }
 
     private Connection getPostgresJDBCConnection() throws SQLException {
-        String url = properties.getProperty("database_url");
-        System.out.println(url);
-        Properties props = new Properties();
-        props.setProperty("user", properties.getProperty("database_user"));
-        props.setProperty("password", properties.getProperty("database_password"));
-        props.setProperty("ssl", "true");
-        return DriverManager.getConnection(url, props);
+//        String url = properties.getProperty("database_url");
+//        Properties props = new Properties();
+//        props.setProperty("user", properties.getProperty("database_user"));
+//        props.setProperty("password", properties.getProperty("database_password"));
+//        props.setProperty("ssl", "true");
+//        return DriverManager.getConnection(url, props);
+        return DriverManager.getConnection(properties.getProperty("database_url"), properties.getProperty("database_user"), properties.getProperty("database_password"));
     }
 
     private static String readFile(String pathname) throws IOException {
@@ -66,7 +67,7 @@ public class PostgresConnector {
 
     private void dumpMap(HashMap<String, String> hashMap) {
 
-        System.out.println("DUMP MAP");
+        System.out.println("***** DUMP MAP START *****");
         int i = 1;
         for (Map.Entry<String, String> entry : hashMap.entrySet()) {
 
@@ -76,6 +77,7 @@ public class PostgresConnector {
             System.out.println("Element = " + i + " KEY = " + key + " VALUE " + value);
             i++;
         }
+        System.out.println("***** DUMP MAP END *****");
 
     }
 
@@ -100,7 +102,6 @@ public class PostgresConnector {
 
             if (properties.getProperty("b_print_sql").equals("true")) {
                 System.out.println("Now Executing the following SQL:\n***** SQL START *****\n" + sql + "\n***** SQL END *****");
-
             }
 
             rs = stmt.executeQuery(sql);
@@ -140,7 +141,9 @@ public class PostgresConnector {
             insertSql = "INSERT INTO " + tableName + " (" + columns + ") VALUES (" + values + ")";
             System.out.println(insertSql);
 
-            dumpMap(hashMap);
+            if (properties.getProperty("b_print_results").equals("true")) {
+                dumpMap(hashMap);
+            }
 
             preparedStatement = connection.prepareStatement(insertSql);
 
@@ -179,7 +182,8 @@ public class PostgresConnector {
 
     public static void main(String[] args) {
 
-        System.out.println("Start");
+        System.out.println("PostgresConnector Starting");
+
         PostgresConnector pgConn = new PostgresConnector("config.properties");
         Connection connection = null;
 
@@ -211,5 +215,7 @@ public class PostgresConnector {
                 e.printStackTrace();
             }
         }
+
+        System.out.println("PostgresConnector Finished");
     }
 }
