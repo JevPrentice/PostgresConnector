@@ -38,16 +38,6 @@ public class PostgresConnector {
         return properties;
     }
 
-    private Connection getPostgresJDBCConnection() throws SQLException {
-//        String url = properties.getProperty("database_url");
-//        Properties props = new Properties();
-//        props.setProperty("user", properties.getProperty("database_user"));
-//        props.setProperty("password", properties.getProperty("database_password"));
-//        props.setProperty("ssl", "true");
-//        return DriverManager.getConnection(url, props);
-        return DriverManager.getConnection(properties.getProperty("database_url"), properties.getProperty("database_user"), properties.getProperty("database_password"));
-    }
-
     private static String readFile(String pathname) throws IOException {
 
         File file = new File(pathname);
@@ -81,7 +71,7 @@ public class PostgresConnector {
 
     }
 
-    private void performQuery(Connection connection) throws SQLException {
+    private void performQuery(Connection connection) {
 
         ResultSet rs = null;
         Statement stmt = null;
@@ -195,7 +185,12 @@ public class PostgresConnector {
         }
 
         try {
-            connection = pgConn.getPostgresJDBCConnection();
+
+            final String databaseUrl = pgConn.properties.getProperty("database_url");
+            final String databaseUser = pgConn.properties.getProperty("database_user");
+            final String databasePassword = pgConn.properties.getProperty("database_password");
+
+            connection = DriverManager.getConnection(databaseUrl, databaseUser, databasePassword);
             System.out.println("Connection created.");
 
             pgConn.performQuery(connection);
