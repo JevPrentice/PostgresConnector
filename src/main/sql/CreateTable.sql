@@ -1,4 +1,4 @@
-CREATE TABLE jev_test
+CREATE TABLE helium_public_report
 (
   column1 text,
   column2 text,
@@ -13,5 +13,5 @@ CREATE TABLE jev_test
 WITH (
   OIDS=FALSE
 );
-ALTER TABLE jev_test
+ALTER TABLE helium_public_report
   OWNER TO helium;

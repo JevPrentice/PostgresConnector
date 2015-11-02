@@ -174,7 +174,14 @@ public class PostgresConnector {
 
         System.out.println("PostgresConnector Starting");
 
-        PostgresConnector pgConn = new PostgresConnector("config.properties");
+        String configFileName = "config.properties";
+        if (args != null && args.length == 1) {
+            configFileName = args[0];
+        }
+        
+        System.out.println("Using the config file: " + configFileName);
+
+        PostgresConnector pgConn = new PostgresConnector(configFileName);
         Connection connection = null;
 
         try {
@@ -211,6 +218,7 @@ public class PostgresConnector {
             }
         }
 
-        System.out.println("PostgresConnector Finished");
+        System.out.println(
+                "PostgresConnector Finished");
     }
 }
