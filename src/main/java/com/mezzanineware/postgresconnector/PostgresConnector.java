@@ -175,10 +175,15 @@ public class PostgresConnector {
         System.out.println("PostgresConnector Starting");
 
         String configFileName = "config.properties";
-        if (args != null && args.length == 1) {
-            configFileName = args[0];
+        try {
+            if (args != null && args.length == 1) {
+                configFileName = args[0];
+            }
+        } catch (Exception e) {
+            System.out.println("Unable to understand parameter, will now use default 'config.properties' file");
+            e.printStackTrace();
         }
-        
+
         System.out.println("Using the config file: " + configFileName);
 
         PostgresConnector pgConn = new PostgresConnector(configFileName);
