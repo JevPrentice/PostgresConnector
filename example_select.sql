@@ -5,4 +5,4 @@ select
     version_number,
     app_version_fk,
     app_release_fk 
-from app limit 1
+from app limit 20

@@ -5,12 +5,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Scanner;
@@ -41,6 +44,11 @@ public class PostgresConnector {
     private static String readFile(String pathname) throws IOException {
 
         File file = new File(pathname);
+
+        if (!file.exists()) {
+            System.out.println("The file: " + System.getProperty("user.dir") + "/" + pathname + " does not exist.\nAborting Now.");
+        }
+
         StringBuilder fileContents = new StringBuilder((int) file.length());
         Scanner scanner = new Scanner(file);
         String lineSeparator = System.getProperty("line.separator");
@@ -55,22 +63,6 @@ public class PostgresConnector {
         }
     }
 
-    private void dumpMap(HashMap<String, String> hashMap) {
-
-        System.out.println("***** DUMP MAP START *****");
-        int i = 1;
-        for (Map.Entry<String, String> entry : hashMap.entrySet()) {
-
-            String key = entry.getKey();
-            String value = entry.getValue();
-
-            System.out.println("Element = " + i + " KEY = " + key + " VALUE " + value);
-            i++;
-        }
-        System.out.println("***** DUMP MAP END *****");
-
-    }
-
     private void performQuery(Connection connection) {
 
         ResultSet rs = null;
@@ -79,72 +71,98 @@ public class PostgresConnector {
         ResultSetMetaData rsmd;
         int columnsNumber;
 
-        String tableName = properties.getProperty("exportToTableName");
+        String tableName = properties.getProperty("destinationTable");
+        String schemaName = properties.getProperty("destinationSchema");
         StringBuilder columns = new StringBuilder();
         StringBuilder values = new StringBuilder();
         String insertSql;
 
         try {
-
             stmt = connection.createStatement();
 
-            String sql = readFile(properties.getProperty("sql_filename"));
-
-            if (properties.getProperty("b_print_sql").equals("true")) {
-                System.out.println("Now Executing the following SQL:\n***** SQL START *****\n" + sql + "\n***** SQL END *****");
+            DatabaseMetaData metadata = connection.getMetaData();
+            ResultSet tables = metadata.getTables(null, null, tableName, null);
+            if (!tables.next()) {
+                System.out.println("The table " + schemaName + "." + tableName + " does not exist. \nAborting Now.");
+                return;
             }
 
-            rs = stmt.executeQuery(sql);
+            if (properties.getProperty("b_do_truncate_export_table").equals("true")) {
+                String truncateSql = "TRUNCATE " + schemaName + "." + tableName;
+                stmt.executeUpdate(truncateSql);
+                System.out.println(truncateSql + " - successful");
+            }
+
+            String selectSql = readFile(properties.getProperty("sql_filename"));
+
+            if (properties.getProperty("b_print_sql").equals("true")) {
+                System.out.println("Now Executing the following SQL:\n***** SQL START *****\n" + selectSql + "\n***** SQL END *****");
+            }
+
+            rs = stmt.executeQuery(selectSql);
 
             rsmd = rs.getMetaData();
             columnsNumber = rsmd.getColumnCount();
 
-            System.out.println("Number Results returned: " + columnsNumber);
+            System.out.println("Number Columns returned: " + columnsNumber);
 
             if (columnsNumber <= 0) {
-                System.out.println("There were no results returned by the query.");
+                System.out.println("There were no columns returned by the query.");
                 return;
             } else if (columnsNumber > 9) {
                 System.out.println("This query returns " + columnsNumber + " columns, but the MAX is 9. :(");
                 return;
             }
 
-            HashMap<String, String> hashMap = new HashMap<>();
+            ArrayList<ArrayList> queryResultList = new ArrayList();
+            for (int i = 1; rs.next(); i++) {
 
-            while (rs.next()) {
-                for (int i = 1; i <= columnsNumber; i++) {
-                    String columnName = rsmd.getColumnName(i);
-                    String columnValue = rs.getString(i);
+                ArrayList<String> record = new ArrayList();
 
-                    hashMap.put(columnName, columnValue);
+                for (int j = 1; j <= columnsNumber; j++) {
+                    String columnValue = rs.getString(j);
 
-                    columns.append("column").append(i);
-                    values.append("?");
+                    record.add(columnValue);
 
-                    if (i <= columnsNumber - 1) {
-                        columns.append(", ");
-                        values.append(", ");
+                    if (i == 1) {
+                        columns.append("column").append(j);
+                        values.append("?");
+
+                        if (j <= columnsNumber - 1) {
+                            columns.append(", ");
+                            values.append(", ");
+                        }
                     }
-                }
-            }
 
-            insertSql = "INSERT INTO " + tableName + " (" + columns + ") VALUES (" + values + ")";
-            System.out.println(insertSql);
+                }
+
+                queryResultList.add(record);
+            }
 
             if (properties.getProperty("b_print_results").equals("true")) {
-                dumpMap(hashMap);
+                System.out.println("Query Results: " + queryResultList.toString());
             }
+            
+            insertSql = "INSERT INTO " + schemaName + "." + tableName + " (" + columns + ") VALUES (" + values + ")";
 
             preparedStatement = connection.prepareStatement(insertSql);
+            connection.setAutoCommit(false);
 
-            int i = 1;
-            for (String value : hashMap.values()) {
-                preparedStatement.setString(i, value);
+            int i = 0;
+            for (ArrayList<String> queryRecord : queryResultList) {
+                int j = 1;
+                for (String s : queryRecord) {
+                    preparedStatement.setString(j, s);
+                    j++;
+                }
+                preparedStatement.addBatch();
                 i++;
             }
 
-            preparedStatement.executeUpdate();
-            System.out.println("Record inserted into table '" + properties.getProperty("exportToTableName") + "'");
+            preparedStatement.executeBatch();
+            connection.commit();
+
+            System.out.println(insertSql + " - successful " + i + " record(s) inserted");
 
         } catch (SQLException | IOException e) {
             e.printStackTrace();
@@ -180,11 +198,11 @@ public class PostgresConnector {
                 configFileName = args[0];
             }
         } catch (Exception e) {
-            System.out.println("Unable to understand parameter, will now use default 'config.properties' file");
+            System.out.println("Unable to understand parameter, will now try to use default 'config.properties' file");
             e.printStackTrace();
         }
 
-        System.out.println("Using the config file: " + configFileName);
+        System.out.println("Using config file: " + System.getProperty("user.dir") + "/" + configFileName);
 
         PostgresConnector pgConn = new PostgresConnector(configFileName);
         Connection connection = null;
