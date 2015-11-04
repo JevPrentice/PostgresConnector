@@ -12,9 +12,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Scanner;
 
@@ -35,7 +32,7 @@ public class PostgresConnector {
         try {
             properties.load(new FileInputStream(filename));
         } catch (Exception e) {
-            e.printStackTrace();
+            e.printStackTrace(System.out);
         }
 
         return properties;
@@ -73,8 +70,8 @@ public class PostgresConnector {
 
         String tableName = properties.getProperty("destinationTable");
         String schemaName = properties.getProperty("destinationSchema");
-        StringBuilder columns = new StringBuilder();
-        StringBuilder values = new StringBuilder();
+        StringBuilder columns;
+        StringBuilder values;
         String insertSql;
 
         try {
@@ -114,16 +111,18 @@ public class PostgresConnector {
                 return;
             }
 
+            columns = new StringBuilder();
+            values = new StringBuilder();
             ArrayList<ArrayList> queryResultList = new ArrayList();
             for (int i = 1; rs.next(); i++) {
 
-                ArrayList<String> record = new ArrayList();
+                ArrayList<String> queryResultElement = new ArrayList();
 
                 for (int j = 1; j <= columnsNumber; j++) {
-                    String columnValue = rs.getString(j);
 
-                    record.add(columnValue);
+                    queryResultElement.add(rs.getString(j));
 
+                    /* For the first record of resultset, get column and value string for INSERT sql */
                     if (i == 1) {
                         columns.append("column").append(j);
                         values.append("?");
@@ -136,13 +135,13 @@ public class PostgresConnector {
 
                 }
 
-                queryResultList.add(record);
+                queryResultList.add(queryResultElement);
             }
 
             if (properties.getProperty("b_print_results").equals("true")) {
-                System.out.println("Query Results: " + queryResultList.toString());
+                System.out.println("Query Result List: " + queryResultList.toString());
             }
-            
+
             insertSql = "INSERT INTO " + schemaName + "." + tableName + " (" + columns + ") VALUES (" + values + ")";
 
             preparedStatement = connection.prepareStatement(insertSql);
@@ -165,7 +164,7 @@ public class PostgresConnector {
             System.out.println(insertSql + " - successful " + i + " record(s) inserted");
 
         } catch (SQLException | IOException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.out);
         } finally {
 
             try {
@@ -173,7 +172,7 @@ public class PostgresConnector {
                     rs.close();
                 }
             } catch (SQLException se) {
-                se.printStackTrace();
+                se.printStackTrace(System.out);
             }
 
             try {
@@ -181,7 +180,7 @@ public class PostgresConnector {
                     stmt.close();
                 }
             } catch (SQLException se) {
-                se.printStackTrace();
+                se.printStackTrace(System.out);
             }
 
         }
@@ -199,7 +198,7 @@ public class PostgresConnector {
             }
         } catch (Exception e) {
             System.out.println("Unable to understand parameter, will now try to use default 'config.properties' file");
-            e.printStackTrace();
+            e.printStackTrace(System.out);
         }
 
         System.out.println("Using config file: " + System.getProperty("user.dir") + "/" + configFileName);
@@ -210,7 +209,7 @@ public class PostgresConnector {
         try {
             Class.forName(pgConn.properties.getProperty("database_driver"));
         } catch (ClassNotFoundException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.out);
             return;
         }
 
@@ -230,14 +229,14 @@ public class PostgresConnector {
             System.out.println("Connection closed.");
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.out);
         } finally {
             try {
                 if (connection != null) {
                     connection.close();
                 }
             } catch (SQLException e) {
-                e.printStackTrace();
+                e.printStackTrace(System.out);
             }
         }
 
