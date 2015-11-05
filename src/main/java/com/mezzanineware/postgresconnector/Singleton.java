@@ -2,6 +2,7 @@ package com.mezzanineware.postgresconnector;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.Connection;
@@ -32,14 +33,25 @@ public class Singleton {
         } catch (ClassNotFoundException ex) {
             Logger.getLogger(Singleton.class.getName()).log(Level.SEVERE, null, ex);
         }
-        System.out.println("JDBC Driver working.");
+        Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "JDBC Driver is working.");
+
     }
 
-    public static Singleton getInstance(String configFile) throws IOException, SQLException {
-        properties.load(new FileInputStream(configFile));
-        return singleton;
+    public static Singleton getInstance(String configFile) {
+        try {
+            properties.load(new FileInputStream(configFile));
+            return singleton;
+        } catch (IOException e) {
+            Logger.getLogger(Singleton.class.getName()).log(Level.SEVERE, "Unable to load properties from: " + System.getProperty("user.dir") + "/" + configFile, e);
+            return null;
+        }
     }
 
+    /**
+     * Remember to Close this Connection once done!
+     *
+     * @return
+     */
     public static Connection getConnection() {
         return Singleton.createConnection();
     }
@@ -47,20 +59,23 @@ public class Singleton {
     private static Connection createConnection() {
         Connection connection = null;
         try {
-            connection = DriverManager.getConnection(properties.getProperty("database_url"), properties.getProperty("database_user"), properties.getProperty("database_password"));
-        } catch (SQLException ex) {
-            Logger.getLogger(Singleton.class.getName()).log(Level.SEVERE, null, ex);
+            String database = properties.getProperty("database_url");
+            connection = DriverManager.getConnection(database, properties.getProperty("database_user"), properties.getProperty("database_password"));
+            Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "Connection created to {0}", database);
+        } catch (SQLException e) {
+            Logger.getLogger(Singleton.class.getName()).log(Level.SEVERE, "SQL Exception while trying to create database connection", e);
         }
-        System.out.println("Connection created.");
         return connection;
     }
 
-    private static String getSqlFileText() throws IOException {
+    private static String getSqlFileText() throws FileNotFoundException {
         String pathname = properties.getProperty("sql_filename");
 
         File file = new File(pathname);
         if (!file.exists()) {
-            System.out.println("The file: " + System.getProperty("user.dir") + "/" + pathname + " does not exist.\nAborting Now.");
+            FileNotFoundException e = new FileNotFoundException();
+            Logger.getLogger(Singleton.class.getName()).log(Level.SEVERE, "The file: " + System.getProperty("user.dir") + "/" + pathname + " does not exist.\nAborting Now.", e);
+            throw e;
         }
 
         StringBuilder fileContents = new StringBuilder((int) file.length());
@@ -72,7 +87,7 @@ public class Singleton {
         }
     }
 
-    public void performQuery(Connection connection) throws SQLException, IOException {
+    public void performQuery(Connection connection) throws SQLException, FileNotFoundException {
 
         DatabaseMetaData metadata = connection.getMetaData();
 
@@ -81,7 +96,7 @@ public class Singleton {
 
         ResultSet tables = metadata.getTables(null, null, tableName, null);
         if (!tables.next()) {
-            System.out.println("The table " + schemaName + "." + tableName + " does not exist. \nAborting Now.");
+            Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "The table {0}.{1} does not exist. \nAborting Now.", new Object[]{schemaName, tableName});
             return;
         }
 
@@ -89,29 +104,33 @@ public class Singleton {
             if (properties.getProperty("b_do_truncate_export_table").equals("true")) {
                 String truncateSql = "TRUNCATE " + schemaName + "." + tableName;
                 stmt.executeUpdate(truncateSql);
-                System.out.println(truncateSql + " - successful");
+                Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "{0} - successful", truncateSql);
             }
 
             String selectSql = getSqlFileText();
 
             if (properties.getProperty("b_print_sql").equals("true")) {
-                System.out.println("Now Executing the following SQL:\n***** SQL START *****\n" + selectSql + "\n***** SQL END *****");
+                Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "Now Executing the following SQL:\n***** SQL START *****\n{0}\n***** SQL END *****", selectSql);
             }
 
             StringBuilder columns;
             StringBuilder values;
             ArrayList<ArrayList> queryResultList;
             try (ResultSet rs = stmt.executeQuery(selectSql)) {
+
                 ResultSetMetaData rsmd = rs.getMetaData();
+
                 int columnsNumber = rsmd.getColumnCount();
-                System.out.println("Number Columns returned: " + columnsNumber);
+                Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "Number Columns returned: {0}", columnsNumber);
+
                 if (columnsNumber <= 0) {
-                    System.out.println("There were no columns returned by the query.");
+                    Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "There were no columns returned by the query.");
                     return;
                 } else if (columnsNumber > 9) {
-                    System.out.println("This query returns " + columnsNumber + " columns, but the MAX is 9. :(");
+                    Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "This query returns {0} columns, but the MAX is 9. :(", columnsNumber);
                     return;
                 }
+
                 columns = new StringBuilder();
                 values = new StringBuilder();
                 queryResultList = new ArrayList();
@@ -141,11 +160,11 @@ public class Singleton {
             }
 
             if (properties.getProperty("b_print_results").equals("true")) {
-                System.out.println("Query Result List: " + queryResultList.toString());
+                Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "Query Result List: {0}", queryResultList.toString());
             }
 
             if (queryResultList.size() <= 0) {
-                System.out.println("Query Returned No Results");
+                Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "Query Returned No Results");
                 return;
             }
 
@@ -168,7 +187,7 @@ public class Singleton {
             preparedStatement.executeBatch();
             connection.commit();
 
-            System.out.println(insertSql + " - successful " + i + " record(s) inserted");
+            Logger.getLogger(Singleton.class.getName()).log(Level.INFO, "{0} - successful {1} record(s) inserted", new Object[]{insertSql, i});
         }
     }
 }

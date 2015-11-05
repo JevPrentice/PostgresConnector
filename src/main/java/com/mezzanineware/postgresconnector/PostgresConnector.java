@@ -1,5 +1,6 @@
 package com.mezzanineware.postgresconnector;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -17,29 +18,15 @@ public class PostgresConnector {
 
     public static void main(String[] args) {
 
-        System.out.println("PostgresConnector Starting");
+        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Starting");
 
-        String configFile = "config.properties";
+        String configFile = (args != null && args.length == 1) ? args[0] : "config.properties";
+        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Using config file: {0}/{1}", new Object[]{System.getProperty("user.dir"), configFile});
 
-        Singleton singleton;
-
-        try {
-            if (args != null && args.length == 1) {
-                configFile = args[0];
-            }
-
-            System.out.println("Using config file: " + System.getProperty("user.dir") + "/" + configFile);
-
-            singleton = Singleton.getInstance(configFile);
-
-        } catch (IOException | SQLException e) {
-            System.out.println("Unable to understand parameter, will now try to use default 'config.properties' file");
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, null, e);
-            return;
-        }
+        Singleton singleton = Singleton.getInstance(configFile);
 
         if (singleton == null) {
-            System.out.println("Unable to get an instance of singleton class.");
+            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Unable to get an instance of singleton class.");
             return;
         }
 
@@ -50,13 +37,15 @@ public class PostgresConnector {
             }
 
             singleton.performQuery(connection);
-            System.out.println("Query Performed.");
+            Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Query Performed.");
 
-        } catch (IOException | SQLException e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, null, e);
+        } catch (FileNotFoundException e) {
+            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Failed to while reading .SQL file into memory.", e);
+        } catch (SQLException e) {
+            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "SQL Exception while using database connection", e);
         }
 
-        System.out.println(
-                "PostgresConnector Finished");
+        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Finished");
+
     }
 }
