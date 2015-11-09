@@ -24,8 +24,14 @@ import java.util.logging.Logger;
  */
 public class PostgresConnector {
 
+    /**
+     * Singleton Instance
+     */
     private static final PostgresConnector singleton = new PostgresConnector();
 
+    /**
+     * Checks Postgres Driver
+     */
     private PostgresConnector() {
         try {
             Class.forName("org.postgresql.Driver");
@@ -36,20 +42,32 @@ public class PostgresConnector {
 
     }
 
+    /**
+     * Get the singleton instance
+     *
+     * @return
+     */
     private static PostgresConnector getInstance() {
         return singleton;
     }
 
     /**
-     * Remember to Close this Connection once done!
+     * Get a connection using config file Remember to Close this Connection once
+     * done!
      *
      * @param configFile
-     * @return
+     * @return Connection or null if unable to create connection
      */
     private Connection getConnection(String configFile) {
         return singleton.createConnection(configFile);
     }
 
+    /**
+     * Create the connection using config file
+     *
+     * @param configFile
+     * @return Connection or null if unable to create connection
+     */
     private Connection createConnection(String configFile) {
         Connection connection = null;
         try {
@@ -65,6 +83,13 @@ public class PostgresConnector {
         return connection;
     }
 
+    /**
+     * Load the properties from given file
+     *
+     * @param configFile
+     * @return
+     * @throws IOException
+     */
     private static Properties getProperties(String configFile) throws IOException {
 
         Properties properties = new Properties();
@@ -77,6 +102,13 @@ public class PostgresConnector {
         return properties;
     }
 
+    /**
+     * Load SQL file into memory
+     *
+     * @param properties
+     * @return
+     * @throws FileNotFoundException
+     */
     private static String getSqlFileText(Properties properties) throws FileNotFoundException {
         String pathname = properties.getProperty("sql_filename");
 
@@ -96,6 +128,15 @@ public class PostgresConnector {
         }
     }
 
+    /**
+     * Execute SQL file, using given connection and config file, into the
+     * destination table
+     *
+     * @param connection
+     * @param configFile
+     * @throws SQLException
+     * @throws FileNotFoundException
+     */
     private void performQuery(Connection connection, String configFile) throws SQLException, FileNotFoundException {
 
         DatabaseMetaData metadata = connection.getMetaData();
@@ -207,7 +248,7 @@ public class PostgresConnector {
             Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "{0} - successful {1} record(s) inserted", new Object[]{insertSql, i});
         }
     }
-    
+
     public static void main(String[] args) {
 
         Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Starting");
@@ -236,7 +277,7 @@ public class PostgresConnector {
         } catch (SQLException e) {
             Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "SQL Exception while using database connection", e);
         }
-        
+
         Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Finished");
     }
 }
