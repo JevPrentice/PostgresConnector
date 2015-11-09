@@ -206,12 +206,13 @@ public class PostgresConnector {
                             columns.append("column").append(j);
                             values.append("?");
 
-                            column_values.add(rsmd.getColumnName(j));
-
                             if (j <= columnsNumber - 1) {
                                 columns.append(", ");
                                 values.append(", ");
                             }
+
+                            column_values.add(rsmd.getColumnName(j));
+
                         }
 
                     }
