@@ -173,6 +173,7 @@ public class PostgresConnector {
 
             StringBuilder columns;
             StringBuilder values;
+            ArrayList<String> column_values = new ArrayList();
             ArrayList<ArrayList> queryResultList;
             try (ResultSet rs = stmt.executeQuery(selectSql)) {
 
@@ -205,6 +206,8 @@ public class PostgresConnector {
                             columns.append("column").append(j);
                             values.append("?");
 
+                            column_values.add(rsmd.getColumnName(j));
+
                             if (j <= columnsNumber - 1) {
                                 columns.append(", ");
                                 values.append(", ");
@@ -224,6 +227,11 @@ public class PostgresConnector {
             if (queryResultList.size() <= 0) {
                 Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Query Returned No Results");
                 return;
+            }
+
+            if (properties.getProperty("b_insert_query_header").equals("true")) {
+                queryResultList.add(0, column_values);
+                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Inserting Query Headers into destination table first record.");
             }
 
             String insertSql = "INSERT INTO " + schemaName + "." + tableName + " (" + columns + ") VALUES (" + values + ")";
