@@ -36,7 +36,7 @@ public class PostgresConnector {
 
     }
 
-    public static PostgresConnector getInstance() {
+    private static PostgresConnector getInstance() {
         return singleton;
     }
 
@@ -46,7 +46,7 @@ public class PostgresConnector {
      * @param configFile
      * @return
      */
-    public Connection getConnection(String configFile) {
+    private Connection getConnection(String configFile) {
         return singleton.createConnection(configFile);
     }
 
@@ -65,7 +65,7 @@ public class PostgresConnector {
         return connection;
     }
 
-    protected static Properties getProperties(String configFile) throws IOException {
+    private static Properties getProperties(String configFile) throws IOException {
 
         Properties properties = new Properties();
         try {
@@ -96,7 +96,7 @@ public class PostgresConnector {
         }
     }
 
-    public void performQuery(Connection connection, String configFile) throws SQLException, FileNotFoundException {
+    private void performQuery(Connection connection, String configFile) throws SQLException, FileNotFoundException {
 
         DatabaseMetaData metadata = connection.getMetaData();
 
@@ -236,8 +236,7 @@ public class PostgresConnector {
         } catch (SQLException e) {
             Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "SQL Exception while using database connection", e);
         }
-
+        
         Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Finished");
-
     }
 }
