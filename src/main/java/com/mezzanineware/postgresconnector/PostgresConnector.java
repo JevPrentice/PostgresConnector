@@ -6,7 +6,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -20,26 +19,32 @@ import java.util.logging.Logger;
 
 /**
  *
- * @author Tranquility
+ * @author Jev Prentice
+ * @since 2015
+ *
+ * Connect to database Read SQL (sql_filename)
+ *
+ * Execute and persist output of query to database in table
+ * destinationTable.destinationSchema
  */
 public class PostgresConnector {
 
     /**
      * Singleton Instance
      */
-    private static final PostgresConnector singleton = new PostgresConnector();
+    final static private PostgresConnector SINGLETON = new PostgresConnector();
+    final static private Logger LOGGER = Logger.getLogger(PostgresConnector.class.getName());
 
     /**
-     * Checks Postgres Driver
+     * Checks PostgreSQL Driver
      */
     private PostgresConnector() {
         try {
             Class.forName("org.postgresql.Driver");
-        } catch (ClassNotFoundException ex) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (final ClassNotFoundException ex) {
+            LOGGER.log(Level.SEVERE, "Missing PostgreSQL Driver", ex);
         }
-        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "JDBC Driver is working.");
-
+        LOGGER.log(Level.INFO, "JDBC Driver is working");
     }
 
     /**
@@ -48,58 +53,46 @@ public class PostgresConnector {
      * @return
      */
     private static PostgresConnector getInstance() {
-        return singleton;
+        return SINGLETON;
     }
 
     /**
-     * Get a connection using config file Remember to Close this Connection once
-     * done!
+     * Get a connection using configFile
+     *
+     * Remember to Close this Connection!
      *
      * @param configFile
-     * @return Connection or null if unable to create connection
      */
-    private Connection getConnection(String configFile) {
-        return singleton.createConnection(configFile);
-    }
-
-    /**
-     * Create the connection using config file
-     *
-     * @param configFile
-     * @return Connection or null if unable to create connection
-     */
-    private Connection createConnection(String configFile) {
-        Connection connection = null;
+    private Connection getConnection(final String configFile) {
         try {
-            Properties properties = getProperties(configFile);
-            String database = properties.getProperty("database_url");
-            connection = DriverManager.getConnection(database, properties.getProperty("database_user"), properties.getProperty("database_password"));
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Connection created to {0}", database);
-        } catch (SQLException e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "SQL Exception while trying to create database connection", e);
-        } catch (IOException ex) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Unable to access config file", ex);
+            final Properties properties = getProperties(configFile);
+            return DriverManager.getConnection(
+                    properties.getProperty("database_url"),
+                    properties.getProperty("database_user"),
+                    properties.getProperty("database_password"));
+        } catch (final SQLException e) {
+            throw new RuntimeException("SQL Exception while trying to create "
+                    + "database connection check configFile values of "
+                    + "database_url, database_user and database_password", e);
         }
-        return connection;
     }
 
     /**
-     * Load the properties from given file
+     * Load the properties from configFile
      *
      * @param configFile
-     * @return
-     * @throws IOException
+     * @return Properties
      */
-    private static Properties getProperties(String configFile) throws IOException {
-
-        Properties properties = new Properties();
+    private static Properties getProperties(final String configFile) {
         try {
+            final Properties properties = new Properties();
             properties.load(new FileInputStream(configFile));
-        } catch (IOException e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Unable to load properties from: " + System.getProperty("user.dir") + "/" + configFile, e);
-            throw new IOException(e);
+            return properties;
+        } catch (final IOException e) {
+            throw new RuntimeException(String.format(
+                    "Unable to load properties from: %s/%s Exception: %s",
+                    System.getProperty("user.dir"), configFile, e));
         }
-        return properties;
     }
 
     /**
@@ -107,24 +100,25 @@ public class PostgresConnector {
      *
      * @param properties
      * @return
-     * @throws FileNotFoundException
      */
-    private static String getSqlFileText(Properties properties) throws FileNotFoundException {
-        String pathname = properties.getProperty("sql_filename");
-
-        File file = new File(pathname);
-        if (!file.exists()) {
-            FileNotFoundException e = new FileNotFoundException();
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "The file: " + System.getProperty("user.dir") + "/" + pathname + " does not exist.\nAborting Now.", e);
-            throw e;
+    private static String getSqlFileText(final Properties properties) {
+        final String pathname = properties.getProperty("sql_filename");
+        final StringBuilder fileContents;
+        final File file;
+        try {
+            file = new File(pathname);
+            fileContents = new StringBuilder((int) file.length());
+        } catch (final NullPointerException e) {
+            LOGGER.log(Level.SEVERE, "Missing or invalid or value in config.properties for sql_filename", e);
+            throw (e);
         }
-
-        StringBuilder fileContents = new StringBuilder((int) file.length());
-        try (Scanner scanner = new Scanner(file)) {
+        try (final Scanner scanner = new Scanner(file)) {
             while (scanner.hasNextLine()) {
                 fileContents.append(scanner.nextLine()).append(System.getProperty("line.separator"));
             }
             return fileContents.toString();
+        } catch (final FileNotFoundException e) {
+            throw new RuntimeException(String.format("The file: %s/%s does not exist - Aborting Now.", System.getProperty("user.dir"), pathname), e);
         }
     }
 
@@ -135,58 +129,48 @@ public class PostgresConnector {
      * @param connection
      * @param configFile
      * @throws SQLException
-     * @throws FileNotFoundException
      */
-    private void performQuery(Connection connection, String configFile) throws SQLException, FileNotFoundException {
+    private void performQuery(final Connection connection, final String configFile) throws SQLException {
 
-        DatabaseMetaData metadata = connection.getMetaData();
+        final Properties properties = getProperties(configFile);
+        final String tableName = properties.getProperty("destinationTable");
+        final String schemaName = properties.getProperty("destinationSchema");
 
-        Properties properties;
-        try {
-            properties = getProperties(configFile);
-        } catch (Exception e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Unable to access config file", e);
-            return;
+        if (!connection.getMetaData().getTables(null, null, tableName, null).next()) {
+            throw new RuntimeException(String.format(
+                    "Table: %s.%s does not exist. - Aborting Now.",
+                    schemaName, tableName));
         }
 
-        String tableName = properties.getProperty("destinationTable");
-        String schemaName = properties.getProperty("destinationSchema");
+        try (final Statement stmt = connection.createStatement()) {
 
-        ResultSet tables = metadata.getTables(null, null, tableName, null);
-        if (!tables.next()) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "The table {0}.{1} does not exist. \nAborting Now.", new Object[]{schemaName, tableName});
-            return;
-        }
-
-        try (Statement stmt = connection.createStatement()) {
             if (properties.getProperty("b_do_truncate_export_table").equals("true")) {
-                String truncateSql = "TRUNCATE " + schemaName + "." + tableName;
+                final String truncateSql = "TRUNCATE " + schemaName + "." + tableName;
                 stmt.executeUpdate(truncateSql);
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "{0} - successful", truncateSql);
+                LOGGER.log(Level.INFO, "{0} - successful", truncateSql);
             }
 
-            String selectSql = getSqlFileText(properties);
+            final String selectSql = getSqlFileText(properties);
 
             if (properties.getProperty("b_print_sql").equals("true")) {
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Now Executing the following SQL:\n***** SQL START *****\n{0}\n***** SQL END *****", selectSql);
+                LOGGER.log(Level.INFO, String.format("Now Executing the following SQL:\n***** SQL START *****\n%s\n***** SQL END *****", selectSql));
             }
 
-            StringBuilder columns;
-            StringBuilder values;
-            ArrayList<String> column_values = new ArrayList();
-            ArrayList<ArrayList> queryResultList;
-            try (ResultSet rs = stmt.executeQuery(selectSql)) {
+            final StringBuilder columns;
+            final StringBuilder values;
+            final ArrayList<String> column_values = new ArrayList();
+            final ArrayList<ArrayList> queryResultList;
+            try (final ResultSet rs = stmt.executeQuery(selectSql)) {
 
-                ResultSetMetaData rsmd = rs.getMetaData();
-
-                int columnsNumber = rsmd.getColumnCount();
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Number Columns returned: {0}", columnsNumber);
+                final ResultSetMetaData rsmd = rs.getMetaData();
+                final int columnsNumber = rsmd.getColumnCount();
+                LOGGER.log(Level.INFO, String.format("Number Columns returned: %s", columnsNumber));
 
                 if (columnsNumber <= 0) {
-                    Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "There were no columns returned by the query.");
+                    LOGGER.log(Level.WARNING, "There were no columns returned by the query.");
                     return;
                 } else if (columnsNumber > 9) {
-                    Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "This query returns {0} columns, but the MAX is 9. :(", columnsNumber);
+                    LOGGER.log(Level.WARNING, String.format("This query returns %s columns, but the MAX is 9. :(", columnsNumber));
                     return;
                 }
 
@@ -195,7 +179,7 @@ public class PostgresConnector {
                 queryResultList = new ArrayList();
                 for (int i = 1; rs.next(); i++) {
 
-                    ArrayList<String> queryResultElement = new ArrayList();
+                    final ArrayList<String> queryResultElement = new ArrayList();
 
                     for (int j = 1; j <= columnsNumber; j++) {
 
@@ -222,28 +206,27 @@ public class PostgresConnector {
             }
 
             if (properties.getProperty("b_print_results").equals("true")) {
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Query Result List: {0}", queryResultList.toString());
+                LOGGER.log(Level.INFO, String.format("Query Result List: %s", queryResultList.toString()));
             }
 
             if (queryResultList.size() <= 0) {
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Query Returned No Results");
-                return;
+                throw new RuntimeException("Query Returned No Results");
             }
 
             if (properties.getProperty("b_insert_query_header").equals("true")) {
                 queryResultList.add(0, column_values);
-                Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Inserting Query Headers into destination table first record.");
+                LOGGER.log(Level.INFO, "Inserting Query Headers into destination table first record.");
             }
 
-            String insertSql = "INSERT INTO " + schemaName + "." + tableName + " (" + columns + ") VALUES (" + values + ")";
+            final String insertSql = String.format("INSERT INTO %s.%s (%s) VALUES (%s)", schemaName, tableName, columns, values);
 
-            PreparedStatement preparedStatement = connection.prepareStatement(insertSql);
+            final PreparedStatement preparedStatement = connection.prepareStatement(insertSql);
             connection.setAutoCommit(false);
 
             int i = 0;
-            for (ArrayList<String> queryRecord : queryResultList) {
+            for (final ArrayList<String> queryRecord : queryResultList) {
                 int j = 1;
-                for (String s : queryRecord) {
+                for (final String s : queryRecord) {
                     preparedStatement.setString(j, s);
                     j++;
                 }
@@ -254,39 +237,24 @@ public class PostgresConnector {
             preparedStatement.executeBatch();
             connection.commit();
 
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "{0} - successful {1} record(s) inserted", new Object[]{insertSql, i});
+            LOGGER.log(Level.INFO, String.format("%s - successful %s record(s) inserted", insertSql, i));
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
 
-        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Starting");
+        LOGGER.log(Level.INFO, "PostgresConnector Starting");
 
-        String configFile = (args != null && args.length == 1) ? args[0] : "config.properties";
-        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Using config file: {0}/{1}", new Object[]{System.getProperty("user.dir"), configFile});
+        final String configFile = (args != null && args.length == 1) ? args[0] : "config.properties";
+        LOGGER.log(Level.INFO, String.format("Using config file: %s/%s", System.getProperty("user.dir"), configFile));
 
-        PostgresConnector instance = PostgresConnector.getInstance();
-
-        if (instance == null) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Unable to get an instance of singleton class.");
-            return;
-        }
-
-        try (Connection connection = instance.getConnection(configFile)) {
-
-            if (connection == null) {
-                return;
-            }
-
+        final PostgresConnector instance = PostgresConnector.getInstance();
+        try (final Connection connection = instance.getConnection(configFile)) {
             instance.performQuery(connection, configFile);
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "Query Performed.");
-
-        } catch (FileNotFoundException e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "Failed to while reading .SQL file into memory.", e);
-        } catch (SQLException e) {
-            Logger.getLogger(PostgresConnector.class.getName()).log(Level.SEVERE, "SQL Exception while using database connection", e);
+        } catch (final SQLException e) {
+            throw new RuntimeException("SQL Exception while using database connection", e);
         }
 
-        Logger.getLogger(PostgresConnector.class.getName()).log(Level.INFO, "PostgresConnector Finished");
+        LOGGER.log(Level.INFO, "PostgresConnector Finished");
     }
 }
